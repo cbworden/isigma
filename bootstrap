@@ -1,0 +1,131 @@
+#! /usr/bin/env python
+
+
+from glob import glob
+import numpy as np
+import csv
+import json
+
+from aggregate import getUtmFromCoordinates
+from bootstrapplot import plot
+
+inputdir = './input'
+
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
+
+def read_rawdata(inputfile):
+    file_id = None
+    rawdata = []
+    fields = ['eventid', 'lon', 'lat', 'iraw', 'intensity']
+
+    with open(inputfile,'r') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if file_id is None:
+                file_id = row[0][1:]
+                continue
+            if '#' in row[0]:
+                continue
+
+            row = list(row)
+            row.insert(0, file_id)
+            rawdata.append(dict(zip(fields,row)))
+
+    return rawdata
+
+
+def aggregate_stations(rawdata, span):
+    aggregated_stations = {}
+
+    for station in rawdata:
+        lat = float(station['lat'])
+        lon = float(station['lon'])
+        utmstring = getUtmFromCoordinates(lat, lon, span)
+        key = '%s;%s' % (station['eventid'], utmstring)
+
+        if key in aggregated_stations:
+            aggregated_stations[key].append(station)
+        else:
+            aggregated_stations[key] = [station]
+
+    print('Got', len(aggregated_stations), 'aggregated stations.')
+    return aggregated_stations
+
+
+# This is an array of intensity points in one UTM block
+def bootstrap_stats(id, agg, nresamples):
+    intdata = np.array([float(x['intensity']) for x in agg])
+    stddevs = []
+    bs_means = []
+    for i in range(0, nresamples):
+        resample = np.random.choice(intdata, intdata.shape, replace=True)
+        stddevs.append(np.std(resample, ddof=1))
+        bs_means.append(resample.mean())
+
+    stddevs = np.array(stddevs)
+    mean_stddevs = stddevs.mean()
+    bs_means = np.array(bs_means)
+    bs_mean = bs_means.mean()
+
+    stats = {
+        'id': id,
+        'n': len(agg),
+        'nresamples': nresamples,
+        'mean': bs_mean.round(2),
+        'means': bs_means.round(2),
+        'stddev': mean_stddevs.round(4),
+        'stddevs': stddevs.round(4)
+    }
+
+    return stats
+
+
+def main():
+    rawdata = []
+
+    inputfiles = glob(inputdir + '/*.txt')
+    for inputfile in inputfiles:
+        this_raw = read_rawdata(inputfile)
+        print('Got %i responses from %s.' % (len(this_raw), inputfile))
+        rawdata.extend(this_raw)
+
+    for span in (1000, 10000):
+        print('Doing span', span)
+        output_file = {
+            1000: 'output/stddevs_1km.csv',
+            10000: 'output/stddevs_10km.csv'
+        }[span]
+
+        # This creates a dict dataset:
+        #   key = eventid;UTM code
+        #   val = list of testimonials
+        aggregated_stations = aggregate_stations(rawdata, span)
+
+        all_stats = []
+        for key, agg in aggregated_stations.items():
+            nresps = len(agg)
+            if nresps < 3:
+                continue
+
+            # Resamplings = 10 * nresps (from WGRW12)
+            nresamplings = 10 * nresps
+            stats = bootstrap_stats(key, agg, nresamplings)
+
+            print('For %s (n=%i): mean = %f, stddev = %f' % (key, stats['n'], stats['mean'], stats['stddev']))
+
+            all_stats.append(stats)
+
+        # Now every station has a mean_of_stddevs
+        with open(output_file,'w') as f:
+            json.dump(all_stats, f, cls=NumpyEncoder)
+        print('Printed output to', output_file)
+        plot('Standard deviation of bootstrapped EMSC responses', all_stats)
+
+if __name__ == '__main__':
+    main()

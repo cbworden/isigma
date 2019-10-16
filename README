@@ -1,0 +1,18 @@
+ISIGMA
+------
+
+Bootstrap EMSC data to compute standard deviation.
+
+Not for production.
+
+Implementation notes
+====================
+
+For MacOS: 
+
+matplotlib is required. If using conda, and you get this error:
+
+- UserWarning: Matplotlib is currently using agg, which is a non-GUI backend, so cannot show the figure.
+
+Then edit the file ~/.matplotlib/matplotlibrc and change 'agg' to 'tkagg'.
+
