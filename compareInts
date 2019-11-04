@@ -1,0 +1,91 @@
+#! /usr/bin/env python
+
+from xmltodict import parse
+from glob import glob
+import json
+
+
+def convert_code(code):
+    utm = code[10:-1]
+    parts = utm.split(' ')
+    if 'EMSC' in code:
+        zone = parts[2] + parts[3]
+        x = parts[0]
+        y = parts[1]
+
+    elif 'DYFI' in code:
+        zone = parts[0]
+        suffix = parts[3][1:]
+        x = parts[1] + suffix
+        if x[0] == '0':
+            x = x[1:]
+        y = parts[2] + suffix
+
+    utm = ' '.join([zone, x, y])
+    return utm
+
+
+def main():
+    filedata = []
+    for inputfile in glob('./*_dat.xml'):
+        print('Reading', inputfile)
+
+        with open(inputfile, 'rb') as f:
+            data = parse(f)
+            filedata.append(data)
+
+    alldata = {}
+    for data in filedata:
+
+        stations = data['shakemap-data']['stationlist']['station']
+        for station in stations:
+
+            code = station['@code']
+            utm = convert_code(code)
+            network = station['@code'][0:4].lower()
+            stat = {
+                'code': code,
+                'lat': station['@lat'],
+                'lon': station['@lon'],
+                'mi': station['@intensity'],
+                'network': network
+            }
+
+            if '@dist' in station:
+                try:
+                    dist = station['@dist']
+                    stat['dist'] = dist
+                except KeyError:
+                    pass
+
+            if utm not in alldata:
+                alldata[utm] = {}
+            alldata[utm][network] = stat
+
+        print('Got', len(alldata), 'unique utms.')
+        matchdata = {}
+        for utm, stations in alldata.items():
+            if len(stations.keys()) > 1:
+                dist = stations['dyfi']['dist']
+                matchdata[utm] = {
+                    'utm': utm,
+                    'dist': dist,
+                    'dyfi': stations['dyfi']['mi'],
+                    'emsc': stations['emsc']['mi']
+                }
+
+        print('Got', len(matchdata), 'matching utms.')
+
+        distsorted = sorted(matchdata.keys(), key=lambda k: float(matchdata[k]['dist']))
+        outputfile = 'comparison.csv'
+        with open(outputfile,'w') as f:
+            for key in distsorted:
+                data = matchdata[key]
+                f.write('%.1f,%.1f,%.1f,"%s"' % (float(data['dist']),
+                                                 float(data['dyfi']),
+                                                 float(data['emsc']), key))
+        print('Done writing to', outputfile)
+
+
+if __name__ == '__main__':
+    main()

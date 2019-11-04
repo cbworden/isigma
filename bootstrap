@@ -90,16 +90,18 @@ def main():
     rawdata = []
 
     inputfiles = glob(inputdir + '/*.txt')
+    c=0
     for inputfile in inputfiles:
         this_raw = read_rawdata(inputfile)
         print('Got %i responses from %s.' % (len(this_raw), inputfile))
         rawdata.extend(this_raw)
+        c+=1
 
     for span in (1000, 10000):
         print('Doing span', span)
         output_file = {
-            1000: 'output/stddevs_1km.csv',
-            10000: 'output/stddevs_10km.csv'
+            1000: 'output/stddevs_1km.json',
+            10000: 'output/stddevs_10km.json'
         }[span]
 
         # This creates a dict dataset:
@@ -124,8 +126,17 @@ def main():
         # Now every station has a mean_of_stddevs
         with open(output_file,'w') as f:
             json.dump(all_stats, f, cls=NumpyEncoder)
-        print('Printed output to', output_file)
-        plot('Standard deviation of bootstrapped EMSC responses', all_stats)
+        print('Saved output to', output_file)
+        if span == 1000:
+            spantext = '1km'
+        else:
+            spantext = '10km'
+        fig = plot('STDDEV of bootstrapped EMSC responses (%s UTM blocks)' % spantext, all_stats, show=False)
+
+        output_file = output_file.replace('.json', '.png')
+        fig.savefig(output_file)
+        print('Printed plot to', output_file)
+
 
 if __name__ == '__main__':
     main()
