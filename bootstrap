@@ -12,13 +12,18 @@ from bootstrapplot import plot
 inputdir = './input'
 
 
-class NumpyEncoder(json.JSONEncoder):
+# Turn NP object into JSON output text
+class jsonNumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
 
+# EMSC gives two intensities:
+# 1. iraw: intensity from original EMSC algorithm
+# 2. intensity: corrected by EMSC to better match dyfi
+# For this analysis, I am using #2
 def read_rawdata(inputfile):
     file_id = None
     rawdata = []
@@ -40,6 +45,9 @@ def read_rawdata(inputfile):
     return rawdata
 
 
+# Each unique "station" will be a UTM block (either 1km or 10km)
+# with N EMSC responses in it for one particular event.
+# The unique index is "[eventid];[umtstring]"
 def aggregate_stations(rawdata, span):
     aggregated_stations = {}
 
@@ -58,7 +66,18 @@ def aggregate_stations(rawdata, span):
     return aggregated_stations
 
 
-# This is an array of intensity points in one UTM block
+# Given a "station", get its bootstrap statistics.
+#  intdata: array of individual response intensities
+#           in one UTM block for one event.
+#  nresamples:  10 * len(intdata)
+#
+# 1. Loop [nresamples] times:
+#   - Create a 'resample' array of sampling-with-replacement of intdata
+#                        (with same shape as intdata)
+#   - Compute stddev of this array
+#   - Compute mean of this array
+# 2. Get mean of all stddevs
+
 def bootstrap_stats(id, agg, nresamples):
     intdata = np.array([float(x['intensity']) for x in agg])
     stddevs = []
@@ -116,8 +135,8 @@ def main():
                 continue
 
             # Resamplings = 10 * nresps (from WGRW12)
-            nresamplings = 10 * nresps
-            stats = bootstrap_stats(key, agg, nresamplings)
+            nresamples = 10 * nresps
+            stats = bootstrap_stats(key, agg, nresamples)
 
             print('For %s (n=%i): mean = %f, stddev = %f' % (key, stats['n'], stats['mean'], stats['stddev']))
 
@@ -125,7 +144,7 @@ def main():
 
         # Now every station has a mean_of_stddevs
         with open(output_file,'w') as f:
-            json.dump(all_stats, f, cls=NumpyEncoder)
+            json.dump(all_stats, f, cls=jsonNumpyEncoder)
         print('Saved output to', output_file)
         if span == 1000:
             spantext = '1km'
