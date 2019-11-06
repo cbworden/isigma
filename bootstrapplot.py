@@ -8,7 +8,7 @@ def plot(title, data, show=False):
     xbound = 120
     ybound = 3
 
-    # Plot stddev for each boostrap realization
+    # Plot stddev for each bootstrap realization
 
     bootstrapped_x = None
     bootstrapped_y = None
@@ -20,9 +20,11 @@ def plot(title, data, show=False):
         stddev = station['stddev']
         # print('%s: n=%i (%i) s=%.2f' % (id, nresps, nresamples, stddev))
 
-        # Save bootstrapped scatter points
-        y = station['stddevs']
-        x = np.full(y.shape, fill_value=nresps)
+        # Save bootstrapped scatter points (grey dots)
+        # y = station['stddevs']
+        # x = np.full(y.shape, fill_value=nresps)
+        y = station['stddev']
+        x = nresps
         if bootstrapped_x is None:
             bootstrapped_x = x
             bootstrapped_y = y
@@ -36,15 +38,15 @@ def plot(title, data, show=False):
         else:
             stddevs_by_nresps[nresps] = [stddev]
 
-    # Plot scatterplot
+    # Plot scatterplot (grey dots)
     ax.scatter(bootstrapped_x, bootstrapped_y, c='grey', s=5, alpha=0.25, label='Bootstrapped STDDEV')
 
-    # Plot mean stddev for each nresp bin
+    # Plot mean stddev for each nresp bin (black dots)
     mean_x = []
     mean_y = []
-    for nresps, stddevs in stddevs_by_nresps.items():
+    for nresps, stddev in stddevs_by_nresps.items():
         mean_x.append(nresps)
-        mean_stddevs = np.nanmean(np.array(stddevs))
+        mean_stddevs = np.nanmean(np.array(stddev))
         mean_y.append(mean_stddevs)
 
     print(mean_x)
